@@ -1,0 +1,17 @@
+python predict.py \
+    --image_path datasets/other \
+    --model_path output/bert_no_finetune/checkpoint-45000.pt \
+    --gpt2_model_path pretrain_models/gpt2 \
+    --bert_model_path pretrain_models/bert \
+    --clip_model_path pretrain_models/ViT-B-32.pt \
+    --output_path output \
+    --prefix_len 10 \
+    --constant_len 10 \
+    --clip_size 512 \
+    --max_len 100 \
+    --batch_size 4 \
+    --temperature 1 \
+    --topk 0 \
+    --topp 0.8 \
+    --num_generate 5 \
+    --mapping_type bert

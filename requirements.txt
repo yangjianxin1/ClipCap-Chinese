@@ -1,0 +1,7 @@
+git+https://github.com/openai/CLIP.git
+transformers~=4.10.2
+scikit-image==0.18.1
+torch==1.11
+loguru
+tensorboard
+jieba

@@ -1,0 +1,18 @@
+python predict.py \
+    --image_path datasets/test \
+    --model_path output/mlp_finetune/checkpoint-35000.pt \
+    --gpt2_model_path pretrain_models/gpt2 \
+    --bert_model_path pretrain_models/bert \
+    --clip_model_path pretrain_models/ViT-B-32.pt \
+    --output_path output \
+    --prefix_len 10 \
+    --constant_len 10 \
+    --clip_size 512 \
+    --max_len 100 \
+    --batch_size 4 \
+    --temperature 1 \
+    --topk 0 \
+    --topp 0.8 \
+    --num_generate 5 \
+    --finetune_gpt2 \
+    --mapping_type mlp
