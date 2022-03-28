@@ -19,11 +19,11 @@ __这就萌生了一个比较直观的想法：既然图像与文本之间的语
 - prefix_embed作为提示信息，输入到GPT2中，进行caption生成。
 
 本项目工作概述：
-- 图像编码器与文本生成器分别使用CLIP与中文GPT2，预训练权重获取【[ViT-B/32](https://openaipublic.azureedge.net/clip/models/40d365715913c9da98579312b702a82c18be219cc2a73407c4526f58eba950af/ViT-B-32.pt) 】
+- 图像编码器与文本生成器分别使用CLIP与中文GPT2，CLIP与GPT2的的预训练权重分别为【[ViT-B/32](https://openaipublic.azureedge.net/clip/models/40d365715913c9da98579312b702a82c18be219cc2a73407c4526f58eba950af/ViT-B-32.pt) 】
 【[GPT2模型分享-通用中文模型（12层）](https://github.com/Morizeyao/GPT2-Chinese) 】
 - Mapping Network分别使用MLP与Bert进行实现（原文的Transformer本质上也是8层多头注意力的堆叠）。
 - 使用[Flickr30k数据集](http://hockenmaier.cs.illinois.edu/DenotationGraph/) ，并且使用[机器翻译得到的中文caption数据](https://github.com/li-xirong/cross-lingual-cap) ，质量可能不如原生数据。
-- 验证MLP+GPT2 tuning（固定CLIP的权重，MLP与GPT2一起进行finetune）与BertMapper+GPT2 no_tuning（固定CLIP与GPT2权重，只对BertMapper进行finetune）
+- 验证MLP+GPT2 tuning（固定CLIP的权重，MLP与GPT2一起进行finetune）与BertMapper+GPT2 no_tuning（固定CLIP与GPT2权重，只对BertMapper进行finetune）的效果
 
 ### 数据集
 图片与caption分别来自：[Flickr30k数据集](http://hockenmaier.cs.illinois.edu/DenotationGraph/) 与 [机器翻译得到的中文caption数据](https://github.com/li-xirong/cross-lingual-cap)
@@ -144,7 +144,7 @@ tensorboard --logdir ./output
 - 仅从验证集loss的角度，可以看到，相比于BertMapper+GPT2 no_tuning，MLP+GPT2 tuning的收敛速度更快，并且能够达到更好的效果。
 这也比较符合常理，因为在MLP+GPT2 tuning中，MLP与GPT2模型的参数是一起训练的，使得文本空间往图像空间靠拢。而在BertMapper+GPT2 no_tuning中，
 只有BertMapper参数在进行训练，而GPT2是固定的，因此BertMapper的训练难度更高。
-- 训练30-40k步的时候，模型趋于收敛，继续训练模型loss不降反升。
+- 训练30-40k步的时候，模型趋于收敛，继续训练模型loss不降反升，说明此时模型已经过拟合了。可以尝试使用更大的数据集来解决该问题。
 
 
 ## 生成效果
@@ -158,7 +158,7 @@ tensorboard --logdir ./output
 
 
 ###  Dev生成效果
-下表展示了模型在Dev图片上的生成效果。其中每张图对应两个生成caption，其中第一个为MLP+GPT2 tuning生成的，第二个为BertMapper+GPT2 no_tuning生成的
+下表展示了模型在Dev图片上的生成效果。其中每张图对应两个生成caption，其中第一行为MLP+GPT2 tuning生成的，第二行为BertMapper+GPT2 no_tuning生成的
 
 |   | |  | 
 | ----  | ----  | ----  |  
@@ -167,7 +167,7 @@ tensorboard --logdir ./output
 |  ![avatar](./datasets/dev/371897.jpg)  | ![avatar](./datasets/dev/371902.jpg) |![avatar](./datasets/dev/27860802.jpg)|
 | • 一个穿红色衬衣和牛仔裤的人在木制的建筑物外面走<br/> • 一个穿红色衬衫的男人在一个空旷的街道|  • 有几个人坐在一个露天的桌子旁 <br/> • 一群人在一个烧烤的台子上烤串| • 一个女孩和男孩在足球场上踢足球 <br/>• 两个孩子在踢足球|
 
-
+#### 多结果展示
 下面为多结果展示，可以明显看到MLP+GPT2 tuning的生成效果好于BertMapper+GPT2 no_tuning。更多生成caption可查看目录output/dev。
 
 ![avatar](./datasets/dev/371897.jpg)
@@ -187,7 +187,6 @@ MLP+GPT2 tuning生成的10个case如下：
 ```
 BertMapper+GPT2 no_tuning生成的10个case如下：
 ```
-
 一个穿着红色衬衫的人在一个自行车棚
 一个穿红色衬衫的男人在一个空旷的街道
 一个年轻的男人走在一个小的院子
@@ -201,7 +200,7 @@ BertMapper+GPT2 no_tuning生成的10个case如下：
 ```
 
 ### Test生成效果
-下表展示了MLP+GPT2 tuning模型在Test图片上的生成效果。
+下表展示了MLP+GPT2 tuning模型在Test图片上的生成效果。更多生成caption可查看目录output/test。
 
 |   | |  | 
 | ----  | ----  | ----  |  
@@ -211,10 +210,59 @@ BertMapper+GPT2 no_tuning生成的10个case如下：
 | • 一群人在海滩上玩耍<br/> • 一个年轻的男孩在海滩上玩耍 <br/> •一个孩子在海滩上玩耍|  • 一个女人坐在一个苹果笔记本电脑前 <br/> • 一个女人用一台笔记本电脑在电脑上做了一些工作<br/> •一个年轻人用一台笔记本电脑做演示| • 一个男人对着镜头微笑 <br/>• 一个非洲裔美国人的图像<br/>•一个黑人男子在舞台上|
 
 
-多结果展示：
+#### 多结果展示
 
-badcase分析：
+可以看到模型生成的前几个caption，无论语义还是流畅度都与图片相符，即使后面几个case在流畅性方面存在不足，但是却都能捕获到图片中【女人、白色衣服】这一关键信息。
+
+![avatar](./datasets/test/50292297228_5c260d7dd9_b.jpg)
+```
+一个女人穿着白色的衣服走到田野里
+一个穿着白衣服的女人在外面散步
+一个穿着白色连衣裙的女人
+一个穿着白色连衣裙的女人走在一个岩石的田野里
+一个穿着白衣服的女人走下一条土路
+一个穿着白色衣服的女人正走在一棵大树下
+一个穿着白衣服的女人正走着一棵树
+一个女人正走着一个白色的花在一个山谷
+一个女人在一个白色的衣服和一顶白色的帽子在田野里散步
+一个穿着白衣服的女人正走着一棵棕色的灌木
+```
+
+可以看到，在下列生成的10个caption里，几乎所有caption都捕获到了关键信息【电脑】，并且绝大部分caption都能较为准确地对图片进行描述
+
+![avatar](./datasets/test/25167669554_839ac583a6_b.jpg)
+```
+一个人在电脑上工作
+在一个办公室里工作的女性
+一个戴着耳机的人在电脑上工作
+一个女人坐在一个苹果笔记本电脑前
+一个女人用一台笔记本电脑在电脑上做了一些工作
+一个年轻人用一台笔记本电脑做演示
+一个人坐在一台笔记本电脑上
+一个穿着黑色衬衫的男人在他的电脑上工作
+一个人在电脑上的数据
+一个女人在看电脑屏幕而在她的笔记本电脑
+```
+
+可以看到，模型倾向于以【一个】作为开头去生成caption，这是由于训练集本身就是有偏的，大部分数据都是以数量词作为开头。
+对于该图片，虽然模型生成的大部分caption都没能百分百准确地描述语义信息，但是却生成了【湖、敲、夕阳、日落、水】等于图片语义相关的关键词，
+所以模型在一定程度上还是能够将图片与文本的语义信息联系起来。
+
+![avatar](./datasets/test/48690120836_4824a12e6d_b.jpg)
+```
+一艘船在湖上钓鱼
+一个人在一座桥上的湖上看日落
+有一艘船在一个码头上看到一个水
+船上的夕阳和船的背景
+一个人在水里钓鱼
+船上有很多水的背景
 在日落时一艘船在水中航行
+一个人站在码头旁的一个水上看着一条船上的夕阳
+日落时分一个人站在一个湖上的船上
+一个人正站在一个码头上看着水和帆船
+```
+
+
 
 ### 模型与数据权重分享
 |  模型 | 链接| 
@@ -224,10 +272,10 @@ badcase分析：
 |VIT-B-32||
 |中文GPT2预训练模型||
 
-|  模型 | 链接| 
+|  数据 | 链接| 
 | ----  | ----  | 
-|flickr30k图片数据|    |  
-|flickr30k中文caption|    |  
+|flickr30k图片数据|  [Flickr30k数据集](http://hockenmaier.cs.illinois.edu/DenotationGraph/)  |  
+|flickr30k中文caption|  [机器翻译得到的中文caption数据](https://github.com/li-xirong/cross-lingual-cap) 和处理好的数据：datasests/flickr_caption.txt  |  
 
 ## 提升方向
 - flickr30中文caption数据是由机器翻译获得的，质量上存在缺陷，后续考虑使用更加高质量的数据训练一版模型。
@@ -239,6 +287,9 @@ badcase分析：
 - https://github.com/rmokady/CLIP_prefix_caption
 - https://arxiv.org/abs/2111.09734
 
+## TODO
+- 上传数据与训练好的模型权重
+- 尝试找刚高质量的数据集进行训练
 
 
 
