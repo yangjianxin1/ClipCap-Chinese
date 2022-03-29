@@ -1,29 +1,87 @@
-# 基于CLIP与GPT2的中文Image Caption模型
+# ClipCap：让计算机学会看图说话
 
 ## 项目简介
-Image Caption任务，也就是我们常说的看图说话，即给定一张图片，生成图片的文本描述。该任务的难点在于，图像与文字之间存在巨大的鸿沟，
-最直观的做法是使用图像编码器对输入的图像进行编码，然后将图像编码输入到文本生层器中，生成caption。
-但该做法一般都需要对图像编码器与文本生成器一起训练，训练参数量大，训练时间久。
+Image Caption即我们常说的看图说话：给定一张图片，生成该图片对应的自然语言描述。
+该任务涉及到了图像与自然语言两个模态，然而图像空间与自然语言空间本就十分庞大，并且两者之间存在巨大的语义鸿沟。
+如何将两个庞大的语义空间进行对齐，这是该任务的重点。本项目对[ClipCap: CLIP Prefix for Image Captioning](https://arxiv.org/pdf/2111.09734.pdf) 
+论文进行介绍，并且对论文在Flickr30k中文数据集上进行实验复现和效果展示。
 
-无论在CV还是NLP方面，我们可以获取到很多模型的预训练权重，图像编码器和文本生成器亦是如此。
-我们是否可以直接使用预训练好的图像编码器与文本生成器来进行image caption任务呢，答案显然是不行。
-因为单独训练的图像编码器与文本生成器，它们之间的图像空间和文本空间存在着巨大的鸿沟，语义没有进行对齐。
-__这就萌生了一个比较直观的想法：既然图像与文本之间的语义空间存在鸿沟，那在它们中间搭一座桥梁进行沟通不就好了吗？__
-而文章[ClipCap: CLIP Prefix for Image Captioning](https://arxiv.org/pdf/2111.09734.pdf) 就是基于这个思想，
-该论文提出了一种Mapping Network来充当两种图像与文本之间的桥梁，弥补两者之间的语义鸿沟。
+## 论文概述
 
-在预训练模型方面，作者使用了CLIP和GPT2，两者分别在图像编码和文本生成方面都有非常优秀的表现。作者在CLIP与GPT2中间设计了两种桥梁（Mapping Network）：MLP与Transformer。
-处理流程如下：
-- 首先使用CLIP对图片进行编码，得到一个图片向量，记作clip_embed。
-- 使用Mapping Network对clip_embed进行语义理解，将图像编码映射到文本空间，得到prefix_embed。
-- prefix_embed作为提示信息，输入到GPT2中，进行caption生成。
+### 模型总览
+ClipCap提出了一种基于Mapping Network的Encoder-Decoder模型，其中Mapping Network扮演了图像空间与文本空间之间的桥梁。模型主要分为三部分：
+- 图像编码器：采用CLIP模型，负责对输入的图像进行编码，得到一个图片向量clip_embed。
+- Mapping Network：扮演图像空间与文本空间之间的桥梁，负责将图片向量clip_embed映射到文本空间中，得到一个文本提示向量序列prefix_embeds。
+- 文本解码器：采用GPT2模型，根据提示向量序列prefix_embeds，生成caption。
 
-本项目工作概述：
-- 图像编码器与文本生成器分别使用CLIP与中文GPT2，CLIP与GPT2的的预训练权重分别为【[ViT-B/32](https://openaipublic.azureedge.net/clip/models/40d365715913c9da98579312b702a82c18be219cc2a73407c4526f58eba950af/ViT-B-32.pt) 】
-【[GPT2模型分享-通用中文模型（12层）](https://github.com/Morizeyao/GPT2-Chinese) 】
-- Mapping Network分别使用MLP与Bert进行实现（原文的Transformer本质上也是8层多头注意力的堆叠）。
-- 使用[Flickr30k数据集](http://hockenmaier.cs.illinois.edu/DenotationGraph/) ，并且使用[机器翻译得到的中文caption数据](https://github.com/li-xirong/cross-lingual-cap) ，质量可能不如原生数据。
-- 验证MLP+GPT2 tuning（固定CLIP的权重，MLP与GPT2一起进行finetune）与BertMapper+GPT2 no_tuning（固定CLIP与GPT2权重，只对BertMapper进行finetune）的效果
+![avatar](./images/overview.jpg)
+
+论文中直接使用了预训练好的CLIP与GPT2-Large权重，两者分别是非常优秀的图像编码器和文本生层器，
+能够将图像与文本映射到较好的语义空间中。然而两个模型是使用不同的任务进行训练的，语义空间没有进行对齐。
+对于该问题，作者设计了两种Mapping Network，负责将图像与文本空间进行对齐。
+
+### MLP Mapping Network
+使用多层全连接层作为CLIP与GPT2模型之间的桥梁。
+具体做法如下：首先将图片向量clip_embed经过两层全连接层，映射成提示向量prefix_embeds，该向量作为提示信息输入到GPT2模型中，
+然后GPT2模型根据prefix_embeds生成图片对应的caption。
+
+![avatar](./images/mlp.jpg)
+
+### Transformer Mapping Network
+使用Transformer作为CLIP与GPT2模型之间的桥梁。具体做法如下：
+- 首先将图片向量clip_embed经过一层全连接层，映射成提示向量序列prefix_embeds。
+- Transformer中还维护了一个可学习的constant_embeds，将prefix_embeds与constant_embeds进行concat操作，然后输入到Transforemer中，让prefix_embeds与constant_embeds进行充分的交互。
+- 将prefix_embeds在Transformer对应的输出作为最终的prefix_embeds，作为GPT2模型的提示信息，生成最终的caption。
+
+在该方法中，作者引入了constant embeds，这是一个向量序列，目的是为了让其能够在多头注意力中，捕获到prefix_embeds中携带的语义信息。
+
+![avatar](./images/transformer.jpg)
+
+
+## 项目结构
+- datasets：存放数据
+- models:存放自己实现的BERT模型代码
+- output:输出目录
+- pretrain_models：预训练模型存放位置
+- scripts：脚本存放位置
+- dataset.py
+- predict.py:根据图片生成caption
+- process_caption.py:将flickr中文caption整理成统一格式
+- process_clickr.py:对图片进行编码，获得image-caption训练数据
+- statistics.py:对flickr数据集的caption长度分布进行统计
+- train.py:训练脚本
+
+
+## 使用方法
+### Quick Start
+安装依赖包：
+```
+pip install -r requirements.txt
+```
+数据预处理（主要是对图像进行编码，得到train.pkl）：
+```
+python process_flickr.py
+```
+
+训练MLP+GPT2 tuning：
+```
+bash scripts/train_finetune_gpt2.sh
+```
+训练Bert+GPT2 no_tuning：
+```
+bash scripts/train_no_finetune_gpt2.sh
+```
+使用MLP+GPT2 tuning进行生成：
+```
+bash scripts/predict_finetune_gpt2.sh
+```
+使用Bert+GPT2 no_tuning进行生成：
+```
+bash scripts/predict_no_finetune_gpt2.sh
+```
+
+
+## 实验介绍
 
 ### 数据集
 图片与caption分别来自：[Flickr30k数据集](http://hockenmaier.cs.illinois.edu/DenotationGraph/) 与 [机器翻译得到的中文caption数据](https://github.com/li-xirong/cross-lingual-cap)
@@ -79,56 +137,13 @@ caption的长度分布如下图：
 
 基于flickr中文caption存在以上问题，后续会尝试使用更高质量的中文数据集进行训练。
 
-## 项目结构
-- datasets：存放数据
-- models:存放自己实现的BERT模型代码
-- output:输出目录
-- pretrain_models：预训练模型存放位置
-- scripts：脚本存放位置
-- dataset.py
-- predict.py:根据图片生成caption
-- process_caption.py:将flickr中文caption整理成统一格式
-- process_clickr.py:对图片进行编码，获得image-caption训练数据
-- statistics.py:对flickr数据集的caption长度分布进行统计
-- train.py:训练脚本
-
-
-## 使用方法
-### Quick Start
-安装依赖包：
-```
-pip install -r requirements.txt
-```
-数据预处理（主要是对图像进行编码，得到train.pkl）：
-```
-python process_flickr.py
-```
-
-训练MLP+GPT2 tuning：
-```
-bash scripts/train_finetune_gpt2.sh
-```
-训练BertMapper+GPT2 no_tuning：
-```
-bash scripts/train_no_finetune_gpt2.sh
-```
-使用MLP+GPT2 tuning进行生成：
-```
-bash scripts/predict_finetune_gpt2.sh
-```
-使用BertMapper+GPT2 no_tuning进行生成：
-```
-bash scripts/predict_no_finetune_gpt2.sh
-```
-
-
-## 实验说明
-
 ### 实验细节
 - 图像编码器与文本生成器分别使用CLIP与中文GPT2，预训练权重分别使用的是【[ViT-B/32](https://openaipublic.azureedge.net/clip/models/40d365715913c9da98579312b702a82c18be219cc2a73407c4526f58eba950af/ViT-B-32.pt) 】
 【[GPT2模型分享-通用中文模型](https://github.com/Morizeyao/GPT2-Chinese) 】。
-- 在训练的时候，CLIP模型的权重均被冻结。在MLP+GPT2 tuning中MLP与GPT2的权重均进行finetune。在BertMapper+GPT2 no_tuning中，只对BertMapper进行finetune。
-- 训练时的batch size为40，epoch为40，学习率为2e-5，prefix_len为10，constant_len为10，clip_size为512，warmup_steps为5000。
+- Mapping Network分别使用MLP与Bert进行实现（原文的Transformer本质上也是8层多头注意力进行堆叠）
+- 训练的时候，CLIP模型的权重均被冻结。在MLP+GPT2 tuning的训练中MLP与GPT2的权重均进行finetune；而在Bert+GPT2 no_tuning的训练中，只对Bert的权重进行finetune，并且Bert没有加载预训练权重，为随机初始化。Bert为8层多头注意力的堆叠。
+- 训练时的batch size为40，epoch为40，学习率为2e-5，prefix_len为10，constant_len为10，clip_size为512，warmup_step为5000。
+- 在生成阶段，对于每张图片，使用topp采样（核采样）生成10个候选的caption， 其中p设为0.8。
 
 
 ### 训练过程分析
@@ -141,9 +156,9 @@ tensorboard --logdir ./output
 ![avatar](./images/loss.jpg)
 
 简单的总结：
-- 仅从验证集loss的角度，可以看到，相比于BertMapper+GPT2 no_tuning，MLP+GPT2 tuning的收敛速度更快，并且能够达到更好的效果。
-这也比较符合常理，因为在MLP+GPT2 tuning中，MLP与GPT2模型的参数是一起训练的，使得文本空间往图像空间靠拢。而在BertMapper+GPT2 no_tuning中，
-只有BertMapper参数在进行训练，而GPT2是固定的，因此BertMapper的训练难度更高。
+- 仅从验证集loss的角度，可以看到，相比于Bert+GPT2 no_tuning，MLP+GPT2 tuning的收敛速度更快，并且能够达到更好的效果。
+这也比较符合常理，因为在MLP+GPT2 tuning中，MLP与GPT2模型的参数是一起训练的，使得文本空间往图像空间靠拢。而在Bert+GPT2 no_tuning中，
+只有Bert参数在进行训练，而GPT2是固定的，因此Bert的训练难度更高。
 - 训练30-40k步的时候，模型趋于收敛，继续训练模型loss不降反升，说明此时模型已经过拟合了。可以尝试使用更大的数据集来解决该问题。
 
 
@@ -158,7 +173,7 @@ tensorboard --logdir ./output
 
 
 ###  Dev生成效果
-下表展示了模型在Dev图片上的生成效果。其中每张图对应两个生成caption，其中第一行为MLP+GPT2 tuning生成的，第二行为BertMapper+GPT2 no_tuning生成的
+下表展示了模型在Dev图片上的生成效果。其中每张图对应两个生成caption，其中第一行为MLP+GPT2 tuning生成的，第二行为Bert+GPT2 no_tuning生成的
 
 |   | |  | 
 | ----  | ----  | ----  |  
@@ -168,7 +183,7 @@ tensorboard --logdir ./output
 | • 一个穿红色衬衣和牛仔裤的人在木制的建筑物外面走<br/> • 一个穿红色衬衫的男人在一个空旷的街道|  • 有几个人坐在一个露天的桌子旁 <br/> • 一群人在一个烧烤的台子上烤串| • 一个女孩和男孩在足球场上踢足球 <br/>• 两个孩子在踢足球|
 
 #### 多结果展示
-下面为多结果展示，可以明显看到MLP+GPT2 tuning的生成效果好于BertMapper+GPT2 no_tuning。更多生成caption可查看目录output/dev。
+下面为多结果展示，可以明显看到MLP+GPT2 tuning的生成效果好于Bert+GPT2 no_tuning。更多生成caption可查看目录output/dev。
 
 ![avatar](./datasets/dev/371897.jpg)
 
@@ -185,7 +200,7 @@ MLP+GPT2 tuning生成的10个case如下：
 一个男人正走在一个停车场
 一个人带着一顶红色的帽子和一条红色的围巾看起来他正走在一个小木屋里
 ```
-BertMapper+GPT2 no_tuning生成的10个case如下：
+Bert+GPT2 no_tuning生成的10个case如下：
 ```
 一个穿着红色衬衫的人在一个自行车棚
 一个穿红色衬衫的男人在一个空旷的街道
@@ -267,7 +282,7 @@ BertMapper+GPT2 no_tuning生成的10个case如下：
 ### 模型与数据权重分享
 |  模型 | 链接| 
 | ----  | ----  | 
-|BertMapper+GPT2 no_tuning|    |  
+|Bert+GPT2 no_tuning|    |  
 |MLP+GPT2 tuning|    |  
 |VIT-B-32||
 |中文GPT2预训练模型||
@@ -289,7 +304,7 @@ BertMapper+GPT2 no_tuning生成的10个case如下：
 
 ## TODO
 - 上传数据与训练好的模型权重
-- 尝试找刚高质量的数据集进行训练
+- 尝试找更高质量的数据集进行训练
 
 
 
