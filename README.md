@@ -1,7 +1,7 @@
 # ClipCap：让计算机学会看图说话
 
 ## 项目简介
-微信文章：[ClipCap：让计算机学会看图说话](https://mp.weixin.qq.com/s/Mofjqi0ErSdRqRyP9gq6Zw)
+微信公众号【YeungNLP】文章：[ClipCap：让计算机学会看图说话](https://mp.weixin.qq.com/s/Mofjqi0ErSdRqRyP9gq6Zw)
 
 Image Caption即我们常说的看图说话：给定一张图片，生成该图片对应的自然语言描述。
 该任务涉及到了图像与自然语言两个模态，然而图像空间与自然语言空间本就十分庞大，并且两者之间存在巨大的语义鸿沟。
